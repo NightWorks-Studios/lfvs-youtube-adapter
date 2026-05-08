@@ -1,0 +1,33 @@
+{
+  "name": "lfvs-youtube-adapter",
+  "version": "1.0.0",
+  "main": "src/index.ts",
+  "dependencies": {
+    "@cordisjs/plugin-http": "^1.5.0",
+    "axios": "^1.16.0",
+    "https-proxy-agent": "^9.0.0",
+    "undici": "^8.2.0"
+  },
+  "keywords": [
+    "cordis-plugin"
+  ],
+  "peerDependencies": {
+    "@cordisjs/plugin-webui": "^0.6.0",
+    "cordis": "^4.0.0-rc.4",
+    "vue": "^3.0.0"
+  },
+  "exports": {
+    ".": "./src/index.ts",
+    "./client": "./client/index.ts"
+  },
+  "cordis": {
+    "service": {
+      "provides": [
+        "lfvs.youtube"
+      ]
+    },
+    "public": {
+      "client": true
+    }
+  }
+}
