@@ -1,10 +1,11 @@
+import {} from '@cordisjs/plugin-webui'
 import { Context, Service } from 'cordis'
 import {} from '@cordisjs/plugin-http'
 import z from 'schemastery'
 import axios, { AxiosInstance } from 'axios'
 import { HttpsProxyAgent } from 'https-proxy-agent'
 import { YoutubeKeyManager } from './utils'
-import { GenericVideoInfo, GenericVideoStat, AdapterResult, LfvsAdapter } from '../../lfvs-core/src/index'
+import { GenericVideoInfo, GenericVideoStat, AdapterResult, LfvsAdapter } from 'lfvs-core'
 
 export interface PlatformHealth {
   status: 'healthy' | 'down'
@@ -37,7 +38,7 @@ export class YoutubeAdapterService extends Service implements LfvsAdapter {
   private apiClient: AxiosInstance
 
   constructor(ctx: Context, config: Config) {
-    super(ctx, 'lfvs.youtube', true)
+    super(ctx, 'lfvs.youtube')
     this.config = config
     this.keyManager = new YoutubeKeyManager(ctx, config.apiKeyFile)
 
@@ -60,7 +61,7 @@ export class YoutubeAdapterService extends Service implements LfvsAdapter {
         path: 'lfvs-youtube-adapter',
         base: import.meta.url,
         dev: '../client/index.ts',
-        prod: '../dist/index.js'
+        prod: '../dist/manifest.json'
       })
       ctx.webui.addListener('youtube/status', () => this.getHealth())
     })
@@ -576,4 +577,10 @@ export class YoutubeAdapterService extends Service implements LfvsAdapter {
 
 export const apply = (ctx: Context, config: Config) => {
   ctx.plugin(YoutubeAdapterService, config)
+}
+
+declare module '@cordisjs/plugin-webui' {
+  interface Events {
+    'youtube/status'(): any
+  }
 }

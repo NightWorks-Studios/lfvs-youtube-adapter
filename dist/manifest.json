@@ -1,0 +1,12 @@
+{
+  "client/index.ts": {
+    "file": "index-m3oz1zhl.js",
+    "name": "index",
+    "src": "client/index.ts",
+    "isEntry": true
+  },
+  "style.css": {
+    "file": "index-f8js3f5j.css",
+    "src": "style.css"
+  }
+}

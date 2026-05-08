@@ -1,6 +1,6 @@
 import { Context, Service } from 'cordis';
 import z from 'schemastery';
-import { GenericVideoInfo, GenericVideoStat, AdapterResult, LfvsAdapter } from '../../lfvs-core/src/index';
+import { GenericVideoInfo, GenericVideoStat, AdapterResult, LfvsAdapter } from 'lfvs-core';
 export interface PlatformHealth {
     status: 'healthy' | 'down';
     latency: number;
@@ -50,3 +50,8 @@ export declare class YoutubeAdapterService extends Service implements LfvsAdapte
     getHealth(): Promise<PlatformHealth>;
 }
 export declare const apply: (ctx: Context, config: Config) => void;
+declare module '@cordisjs/plugin-webui' {
+    interface Events {
+        'youtube/status'(): any;
+    }
+}
