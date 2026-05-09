@@ -88,6 +88,14 @@ export class YoutubeAdapterService extends Service implements LfvsAdapter {
     return null
   }
 
+  protected stop() {
+    if (this.isOnline) {
+      this.isOnline = false
+      this.ctx.get('lfvs.core').unregisterAdapter(this.platform)
+      this.ctx.emit('lfvs/adapter-offline', this.platform, '插件卸载')
+    }
+  }
+
   private handleApiError(e: any, action: string, target: string, startTime: number): AdapterResult<any> {
     const costMs = Date.now() - startTime
     this.ctx.emit('lfvs/api-request', this.platform, action, target, false, costMs, e.message)

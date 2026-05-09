@@ -27,6 +27,7 @@ export declare class YoutubeAdapterService extends Service implements LfvsAdapte
     protected start(): Promise<void>;
     private setOnline;
     getCredentials(): any;
+    protected stop(): void;
     private handleApiError;
     getVideoInfoAndStats(videoId: string): Promise<AdapterResult<{
         info: GenericVideoInfo;
