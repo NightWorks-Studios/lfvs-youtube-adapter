@@ -128,6 +128,10 @@ export class YoutubeKeyManager {
     await this.saveStatus()
   }
   
+  public getKeyCount(): number {
+    return this.keys.length
+  }
+
   public hasAvailableKeys(): boolean {
     return this.keys.some(k => !this.exhaustedKeys.has(k))
   }

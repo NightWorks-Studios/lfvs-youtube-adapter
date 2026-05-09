@@ -4,9 +4,6 @@
   "main": "lib/index.js",
   "dependencies": {
     "@cordisjs/plugin-http": "^1.5.0",
-    "axios": "^1.16.0",
-    "https-proxy-agent": "^9.0.0",
-    "undici": "^8.2.0",
     "schemastery": "^3.18.0",
     "lfvs-core": "*"
   },

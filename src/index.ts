@@ -2,8 +2,6 @@ import {} from '@cordisjs/plugin-webui'
 import { Context, Service } from 'cordis'
 import {} from '@cordisjs/plugin-http'
 import z from 'schemastery'
-import axios, { AxiosInstance } from 'axios'
-import { HttpsProxyAgent } from 'https-proxy-agent'
 import { YoutubeKeyManager } from './utils'
 import { GenericVideoInfo, GenericVideoStat, AdapterResult, LfvsAdapter } from 'lfvs-core'
 
@@ -17,12 +15,10 @@ export interface PlatformHealth {
 }
 
 export interface Config {
-  proxyUrl?: string
   apiKeyFile: string
 }
 
 export const Config: z<Config> = z.object({
-  proxyUrl: z.string().description('HTTP代理地址 (例如 http://127.0.0.1:12334) 仅在需要爬虫回退时建议配置').default('http://127.0.0.1:12334'),
   apiKeyFile: z.string().default('data/valid_youtube_keys.txt').description('API Key 存放路径 (相对于应用的根目录)')
 })
 
@@ -35,26 +31,11 @@ export class YoutubeAdapterService extends Service implements LfvsAdapter {
   private lastHealthTime: number = 0
   private config: Config
   private isOnline: boolean = false
-  private apiClient: AxiosInstance
 
   constructor(ctx: Context, config: Config) {
     super(ctx, 'lfvs.youtube')
     this.config = config
     this.keyManager = new YoutubeKeyManager(ctx, config.apiKeyFile)
-
-    const axiosConfig: any = {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
-        'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
-        'Referer': 'https://www.youtube.com/',
-        'Origin': 'https://www.youtube.com'
-      },
-      timeout: 15000
-    }
-    if (config.proxyUrl) {
-      axiosConfig.httpsAgent = new HttpsProxyAgent(config.proxyUrl)
-    }
-    this.apiClient = axios.create(axiosConfig)
 
     ctx.inject(['webui'], (ctx) => {
       ctx.webui.addEntry({
@@ -102,9 +83,18 @@ export class YoutubeAdapterService extends Service implements LfvsAdapter {
     return { status: 'error', message: e.message, retryable: true }
   }
 
+  /**
+   * 判断 ctx.http 抛出的异常是否包含特定 HTTP 状态码。
+   * Cordis HTTP 抛出的错误对象通常将 status 放在 e.response?.status 或 e.response?.statusCode 上。
+   */
+  private getHttpStatus(e: any): number | undefined {
+    return e.response?.status ?? e.response?.statusCode
+  }
+
   async getVideoInfoAndStats(videoId: string): Promise<AdapterResult<{ info: GenericVideoInfo; stat: GenericVideoStat }>> {
     const start = Date.now()
-    for (let attempt = 0; attempt <= (this.keyManager as any).keys.length; attempt++) {
+    const keyCount = this.keyManager.getKeyCount()
+    for (let attempt = 0; attempt <= keyCount; attempt++) {
       const apiKey = await this.keyManager.getRandomAvailableKey();
       if (!apiKey) break;
       
@@ -119,11 +109,12 @@ export class YoutubeAdapterService extends Service implements LfvsAdapter {
           return { status: 'not_found', message: '视频不存在' }
         }
       } catch (error: any) {
-        if (error.response?.status === 403 && this.isQuotaError(error.response.data)) {
+        const status = this.getHttpStatus(error)
+        if (status === 403 && this.isQuotaError(error.response?.data ?? error.data)) {
           await this.keyManager.markKeyExhausted(apiKey)
           continue // retry
         }
-        if (error.response?.status === 404) {
+        if (status === 404) {
           this.ctx.emit('lfvs/api-request', this.platform, 'getVideoInfoAndStats(api)', videoId, false, Date.now() - start, '404 Not Found')
           return { status: 'not_found', message: '视频不存在' }
         }
@@ -140,8 +131,6 @@ export class YoutubeAdapterService extends Service implements LfvsAdapter {
         return { status: 'success', data: result }
       } else {
         this.ctx.emit('lfvs/api-request', this.platform, 'getVideoInfoAndStats(scrape)', videoId, false, costMs, 'Scraping returned null')
-        // Scraping returning null usually means page structure changed or video doesn't exist. Hard to be sure it's a 404, but we treat it as error to be safe, or 404? 
-        // Let's return error so it retries.
         return { status: 'error', message: '爬虫未获取到数据', retryable: true }
       }
     } catch (e: any) {
@@ -151,7 +140,8 @@ export class YoutubeAdapterService extends Service implements LfvsAdapter {
 
   async getUploaderRecentVideos(uploaderId: string): Promise<AdapterResult<GenericVideoInfo[]>> {
     const start = Date.now()
-    for (let attempt = 0; attempt <= (this.keyManager as any).keys.length; attempt++) {
+    const keyCount = this.keyManager.getKeyCount()
+    for (let attempt = 0; attempt <= keyCount; attempt++) {
       const apiKey = await this.keyManager.getRandomAvailableKey();
       if (!apiKey) break;
       
@@ -161,11 +151,12 @@ export class YoutubeAdapterService extends Service implements LfvsAdapter {
         this.ctx.emit('lfvs/api-request', this.platform, 'getUploaderRecentVideos(api)', uploaderId, true, costMs)
         return { status: 'success', data: result }
       } catch (error: any) {
-        if (error.response?.status === 403 && this.isQuotaError(error.response.data)) {
+        const status = this.getHttpStatus(error)
+        if (status === 403 && this.isQuotaError(error.response?.data ?? error.data)) {
           await this.keyManager.markKeyExhausted(apiKey)
           continue // retry
         }
-        if (error.response?.status === 404) {
+        if (status === 404) {
           this.ctx.emit('lfvs/api-request', this.platform, 'getUploaderRecentVideos(api)', uploaderId, false, Date.now() - start, '404 Not Found')
           return { status: 'not_found', message: '频道不存在' }
         }
@@ -191,16 +182,18 @@ export class YoutubeAdapterService extends Service implements LfvsAdapter {
 
   async getUploaderInfo(uploaderId: string): Promise<AdapterResult<{ uid: string; name: string; avatar?: string }>> {
     const start = Date.now()
-    for (let attempt = 0; attempt <= (this.keyManager as any).keys.length; attempt++) {
+    const keyCount = this.keyManager.getKeyCount()
+    for (let attempt = 0; attempt <= keyCount; attempt++) {
       const apiKey = await this.keyManager.getRandomAvailableKey();
       if (!apiKey) break;
       
       try {
         const channelUrl = 'https://www.googleapis.com/youtube/v3/channels'
-        const channelRes = await this.apiClient.get(channelUrl, {
-          params: { part: 'snippet', id: uploaderId, key: apiKey }
+        const channelRes = await this.ctx.http.get(channelUrl, {
+          params: { part: 'snippet', id: uploaderId, key: apiKey },
+          headers: this.getYoutubeHeaders()
         })
-        const items = channelRes.data?.items
+        const items = channelRes?.items
         if (items && items.length > 0) {
           const item = items[0]
           this.ctx.emit('lfvs/api-request', this.platform, 'getUploaderInfo(api)', uploaderId, true, Date.now() - start)
@@ -216,11 +209,12 @@ export class YoutubeAdapterService extends Service implements LfvsAdapter {
         this.ctx.emit('lfvs/api-request', this.platform, 'getUploaderInfo(api)', uploaderId, false, Date.now() - start, '404 Not Found')
         return { status: 'not_found', message: '频道不存在' }
       } catch (error: any) {
-        if (error.response?.status === 403 && this.isQuotaError(error.response?.data)) {
+        const status = this.getHttpStatus(error)
+        if (status === 403 && this.isQuotaError(error.response?.data ?? error.data)) {
           await this.keyManager.markKeyExhausted(apiKey)
           continue // retry
         }
-        if (error.response?.status === 404) {
+        if (status === 404) {
           this.ctx.emit('lfvs/api-request', this.platform, 'getUploaderInfo(api)', uploaderId, false, Date.now() - start, '404 Not Found')
           return { status: 'not_found', message: '频道不存在' }
         }
@@ -231,8 +225,10 @@ export class YoutubeAdapterService extends Service implements LfvsAdapter {
 
     try {
       const url = `https://www.youtube.com/channel/${uploaderId}`
-      const response = await this.apiClient.get(url, { responseType: 'text' })
-      const html = response.data
+      const html = await this.ctx.http.get(url, {
+        headers: this.getYoutubeHeaders(),
+        responseType: 'text'
+      }) as unknown as string
       const dataMatch = html.match(/ytInitialData\s*=\s*({.+?});/)
       if (dataMatch && dataMatch[1]) {
         const data = JSON.parse(dataMatch[1])
@@ -246,7 +242,8 @@ export class YoutubeAdapterService extends Service implements LfvsAdapter {
       this.ctx.emit('lfvs/api-request', this.platform, 'getUploaderInfo(scrape)', uploaderId, false, Date.now() - start, 'Parse failed')
       return { status: 'error', message: '无法解析频道信息', retryable: true }
     } catch (e: any) {
-      if (e.response?.status === 404) {
+      const status = this.getHttpStatus(e)
+      if (status === 404) {
         this.ctx.emit('lfvs/api-request', this.platform, 'getUploaderInfo(scrape)', uploaderId, false, Date.now() - start, '404 Not Found')
         return { status: 'not_found', message: '频道不存在' }
       }
@@ -254,13 +251,23 @@ export class YoutubeAdapterService extends Service implements LfvsAdapter {
     }
   }
 
+  private getYoutubeHeaders() {
+    return {
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
+      'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
+      'Referer': 'https://www.youtube.com/',
+      'Origin': 'https://www.youtube.com'
+    }
+  }
+
   private async fetchByApi(videoId: string, apiKey: string): Promise<{ info: GenericVideoInfo; stat: GenericVideoStat } | null> {
     const url = 'https://www.googleapis.com/youtube/v3/videos'
-    const response = await this.apiClient.get(url, {
-      params: { part: 'snippet,statistics', id: videoId, key: apiKey }
+    const response = await this.ctx.http.get(url, {
+      params: { part: 'snippet,statistics', id: videoId, key: apiKey },
+      headers: this.getYoutubeHeaders()
     })
 
-    const items = response.data?.items
+    const items = response?.items
     if (!items || items.length === 0) return null
 
     const item = items[0]
@@ -292,22 +299,24 @@ export class YoutubeAdapterService extends Service implements LfvsAdapter {
 
   private async fetchRecentByApi(channelId: string, apiKey: string): Promise<GenericVideoInfo[]> {
     const channelUrl = 'https://www.googleapis.com/youtube/v3/channels'
-    const channelRes = await this.apiClient.get(channelUrl, {
-      params: { part: 'contentDetails,snippet', id: channelId, key: apiKey }
+    const channelRes = await this.ctx.http.get(channelUrl, {
+      params: { part: 'contentDetails,snippet', id: channelId, key: apiKey },
+      headers: this.getYoutubeHeaders()
     })
 
-    const channelItems = channelRes.data?.items
+    const channelItems = channelRes?.items
     if (!channelItems || channelItems.length === 0) return []
     
     const uploadsPlaylistId = channelItems[0].contentDetails.relatedPlaylists.uploads
     const channelName = channelItems[0].snippet.title
 
     const playlistUrl = 'https://www.googleapis.com/youtube/v3/playlistItems'
-    const playlistRes = await this.apiClient.get(playlistUrl, {
-      params: { part: 'snippet', playlistId: uploadsPlaylistId, maxResults: 20, key: apiKey }
+    const playlistRes = await this.ctx.http.get(playlistUrl, {
+      params: { part: 'snippet', playlistId: uploadsPlaylistId, maxResults: 20, key: apiKey },
+      headers: this.getYoutubeHeaders()
     })
 
-    const items = playlistRes.data?.items || []
+    const items = playlistRes?.items || []
     const videos: GenericVideoInfo[] = []
 
     for (const item of items) {
@@ -390,10 +399,9 @@ export class YoutubeAdapterService extends Service implements LfvsAdapter {
         continuation: token
       }
 
-      const response = await this.apiClient.post(apiUrl, payload)
-      const data = response.data || {}
+      const data = await this.ctx.http.post(apiUrl, payload, { headers: this.getYoutubeHeaders() })
 
-      const endpoints = data.onResponseReceivedEndpoints || []
+      const endpoints = data?.onResponseReceivedEndpoints || []
       for (const endpoint of endpoints) {
         const reloadCommand = endpoint.reloadContinuationItemsCommand
         if (reloadCommand?.slot === 'RELOAD_CONTINUATION_SLOT_HEADER') {
@@ -410,7 +418,9 @@ export class YoutubeAdapterService extends Service implements LfvsAdapter {
         }
       }
       return null
-    } catch (error) {
+    } catch (error: any) {
+      this.ctx.emit('lfvs/log', 'youtube-adapter', 'debug',
+        `fetchExactCommentCount 失败 [${videoId}]: ${error.message}`)
       return null
     }
   }
@@ -418,12 +428,12 @@ export class YoutubeAdapterService extends Service implements LfvsAdapter {
   private async fetchByScraping(videoId: string): Promise<{ info: GenericVideoInfo; stat: GenericVideoStat } | null> {
     try {
       const url = `https://www.youtube.com/watch?v=${videoId}`
-      const [htmlResponse, exactCommentCount] = await Promise.all([
-        this.apiClient.get(url, { responseType: 'text' }),
+      const [htmlRaw, exactCommentCount] = await Promise.all([
+        this.ctx.http.get(url, { headers: this.getYoutubeHeaders(), responseType: 'text' }),
         this.fetchExactCommentCount(videoId) 
       ])
 
-      const html = htmlResponse.data as unknown as string
+      const html = htmlRaw as unknown as string
       const playerMatch = html.match(/ytInitialPlayerResponse\s*=\s*({.+?});/)
       const dataMatch = html.match(/ytInitialData\s*=\s*({.+?});/)
 
@@ -488,7 +498,9 @@ export class YoutubeAdapterService extends Service implements LfvsAdapter {
           share: null    
         }
       }
-    } catch (error) {
+    } catch (error: any) {
+      this.ctx.emit('lfvs/log', 'youtube-adapter', 'warn',
+        `fetchByScraping 失败 [${videoId}]: ${error.message}`)
       return null
     }
   }
@@ -496,8 +508,8 @@ export class YoutubeAdapterService extends Service implements LfvsAdapter {
   private async fetchRecentByScraping(uploaderId: string): Promise<GenericVideoInfo[]> {
     try {
       const url = `https://www.youtube.com/channel/${uploaderId}/videos`
-      const response = await this.apiClient.get(url, { responseType: 'text' })
-      const html = response.data as unknown as string
+      const htmlRaw = await this.ctx.http.get(url, { headers: this.getYoutubeHeaders(), responseType: 'text' })
+      const html = htmlRaw as unknown as string
 
       const dataMatch = html.match(/ytInitialData\s*=\s*({.+?});/)
       if (!dataMatch || !dataMatch[1]) return []
@@ -533,7 +545,9 @@ export class YoutubeAdapterService extends Service implements LfvsAdapter {
       }
 
       return videos
-    } catch (error) {
+    } catch (error: any) {
+      this.ctx.emit('lfvs/log', 'youtube-adapter', 'warn',
+        `fetchRecentByScraping 失败 [${uploaderId}]: ${error.message}`)
       return []
     }
   }
@@ -565,7 +579,7 @@ export class YoutubeAdapterService extends Service implements LfvsAdapter {
     const mode = hasKeys ? 'api' : 'scraping'
 
     try {
-      await this.apiClient.head('https://www.youtube.com')
+      await this.ctx.http.head('https://www.youtube.com', { headers: this.getYoutubeHeaders() })
       const result: PlatformHealth = {
         status: 'healthy', latency: Date.now() - start,
         message: hasKeys ? `API模式 (${keyStats.available}/${keyStats.total} Keys 可用)` : '爬虫模式 (回退)',
