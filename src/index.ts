@@ -96,9 +96,10 @@ export class YoutubeAdapterService extends Service implements LfvsAdapter {
 
   async getVideoInfoAndStats(videoId: string): Promise<AdapterResult<{ info: GenericVideoInfo; stat: GenericVideoStat }>> {
     const start = Date.now()
-    const apiKey = await this.keyManager.getRandomAvailableKey()
-    
-    if (apiKey) {
+    for (let attempt = 0; attempt <= (this.keyManager as any).keys.length; attempt++) {
+      const apiKey = await this.keyManager.getRandomAvailableKey();
+      if (!apiKey) break;
+      
       try {
         const result = await this.fetchByApi(videoId, apiKey)
         const costMs = Date.now() - start
@@ -112,13 +113,14 @@ export class YoutubeAdapterService extends Service implements LfvsAdapter {
       } catch (error: any) {
         if (error.response?.status === 403 && this.isQuotaError(error.response.data)) {
           await this.keyManager.markKeyExhausted(apiKey)
-          return this.getVideoInfoAndStats(videoId) // retry
+          continue // retry
         }
         if (error.response?.status === 404) {
           this.ctx.emit('lfvs/api-request', this.platform, 'getVideoInfoAndStats(api)', videoId, false, Date.now() - start, '404 Not Found')
           return { status: 'not_found', message: '视频不存在' }
         }
         this.ctx.emit('lfvs/api-request', this.platform, 'getVideoInfoAndStats(api)', videoId, false, Date.now() - start, error.message)
+        break
       }
     }
 
@@ -141,9 +143,10 @@ export class YoutubeAdapterService extends Service implements LfvsAdapter {
 
   async getUploaderRecentVideos(uploaderId: string): Promise<AdapterResult<GenericVideoInfo[]>> {
     const start = Date.now()
-    const apiKey = await this.keyManager.getRandomAvailableKey()
-    
-    if (apiKey) {
+    for (let attempt = 0; attempt <= (this.keyManager as any).keys.length; attempt++) {
+      const apiKey = await this.keyManager.getRandomAvailableKey();
+      if (!apiKey) break;
+      
       try {
         const result = await this.fetchRecentByApi(uploaderId, apiKey)
         const costMs = Date.now() - start
@@ -152,13 +155,14 @@ export class YoutubeAdapterService extends Service implements LfvsAdapter {
       } catch (error: any) {
         if (error.response?.status === 403 && this.isQuotaError(error.response.data)) {
           await this.keyManager.markKeyExhausted(apiKey)
-          return this.getUploaderRecentVideos(uploaderId)
+          continue // retry
         }
         if (error.response?.status === 404) {
           this.ctx.emit('lfvs/api-request', this.platform, 'getUploaderRecentVideos(api)', uploaderId, false, Date.now() - start, '404 Not Found')
           return { status: 'not_found', message: '频道不存在' }
         }
         this.ctx.emit('lfvs/api-request', this.platform, 'getUploaderRecentVideos(api)', uploaderId, false, Date.now() - start, error.message)
+        break
       }
     }
 
@@ -179,9 +183,10 @@ export class YoutubeAdapterService extends Service implements LfvsAdapter {
 
   async getUploaderInfo(uploaderId: string): Promise<AdapterResult<{ uid: string; name: string; avatar?: string }>> {
     const start = Date.now()
-    const apiKey = await this.keyManager.getRandomAvailableKey()
-    
-    if (apiKey) {
+    for (let attempt = 0; attempt <= (this.keyManager as any).keys.length; attempt++) {
+      const apiKey = await this.keyManager.getRandomAvailableKey();
+      if (!apiKey) break;
+      
       try {
         const channelUrl = 'https://www.googleapis.com/youtube/v3/channels'
         const channelRes = await this.apiClient.get(channelUrl, {
@@ -205,13 +210,14 @@ export class YoutubeAdapterService extends Service implements LfvsAdapter {
       } catch (error: any) {
         if (error.response?.status === 403 && this.isQuotaError(error.response?.data)) {
           await this.keyManager.markKeyExhausted(apiKey)
-          return this.getUploaderInfo(uploaderId)
+          continue // retry
         }
         if (error.response?.status === 404) {
           this.ctx.emit('lfvs/api-request', this.platform, 'getUploaderInfo(api)', uploaderId, false, Date.now() - start, '404 Not Found')
           return { status: 'not_found', message: '频道不存在' }
         }
         this.ctx.emit('lfvs/api-request', this.platform, 'getUploaderInfo(api)', uploaderId, false, Date.now() - start, error.message)
+        break
       }
     }
 
