@@ -16,6 +16,7 @@ export declare class YoutubeKeyManager {
     private checkAndResetQuota;
     getRandomAvailableKey(): Promise<string | null>;
     markKeyExhausted(key: string): Promise<void>;
+    getKeyCount(): number;
     hasAvailableKeys(): boolean;
     getKeyStats(): {
         total: number;

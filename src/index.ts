@@ -12,6 +12,7 @@ export interface PlatformHealth {
   mode: string
   availableKeys: number
   totalKeys: number
+  load: number
 }
 
 export interface Config {
@@ -580,10 +581,11 @@ export class YoutubeAdapterService extends Service implements LfvsAdapter {
 
     try {
       await this.ctx.http.head('https://www.youtube.com', { headers: this.getYoutubeHeaders() })
+      const load = keyStats.total > 0 ? 1 - (keyStats.available / keyStats.total) : 0
       const result: PlatformHealth = {
         status: 'healthy', latency: Date.now() - start,
         message: hasKeys ? `API模式 (${keyStats.available}/${keyStats.total} Keys 可用)` : '爬虫模式 (回退)',
-        mode, availableKeys: keyStats.available, totalKeys: keyStats.total
+        mode, availableKeys: keyStats.available, totalKeys: keyStats.total, load
       }
       this.lastHealthCache = result
       this.lastHealthTime = now
@@ -592,9 +594,10 @@ export class YoutubeAdapterService extends Service implements LfvsAdapter {
       let msg = error.message
       if (error.code === 'ECONNABORTED') msg = '代理连接超时'
       if (error.code === 'ECONNREFUSED') msg = '代理拒绝连接'
+      const load = keyStats.total > 0 ? 1 - (keyStats.available / keyStats.total) : 1
       const result: PlatformHealth = {
         status: 'down', latency: Date.now() - start, message: msg,
-        mode, availableKeys: keyStats.available, totalKeys: keyStats.total
+        mode, availableKeys: keyStats.available, totalKeys: keyStats.total, load
       }
       this.lastHealthCache = result
       this.lastHealthTime = now
@@ -602,6 +605,8 @@ export class YoutubeAdapterService extends Service implements LfvsAdapter {
     }
   }
 }
+
+export const inject = ['http']
 
 export const apply = (ctx: Context, config: Config) => {
   ctx.plugin(YoutubeAdapterService, config)
