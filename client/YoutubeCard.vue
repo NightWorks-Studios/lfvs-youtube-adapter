@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { computed, ref, onMounted, onUnmounted } from 'vue'
-import { useContext, send } from '@cordisjs/client'
+import { useContext, useRpc } from '@cordisjs/client'
 
 const ctx = useContext()
+const rpc = useRpc<any>()
 
 const isCurrentPlugin = computed(() => {
   const entry = ctx.manager?.currentEntry
@@ -24,7 +25,7 @@ let timer: number | undefined
 const fetchHealth = async () => {
   if (!isCurrentPlugin.value) return
   try {
-    health.value = await send('youtube/status')
+    health.value = await rpc.value?.['youtube/status']?.()
   } catch (e) {
     console.error('Failed to fetch youtube status', e)
   }

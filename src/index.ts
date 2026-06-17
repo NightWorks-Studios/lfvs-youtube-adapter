@@ -40,12 +40,13 @@ export class YoutubeAdapterService extends Service implements LfvsAdapter {
 
     ctx.inject(['webui'], (ctx) => {
       ctx.webui.addEntry({
-        path: 'lfvs-youtube-adapter',
-        base: import.meta.url,
-        dev: '../client/index.ts',
-        prod: '../dist/manifest.json'
+        modulePath: 'lfvs-youtube-adapter',
+        baseUrl: import.meta.url,
+        source: '../client/index.ts',
+        manifest: '../dist/manifest.json'
+      }, {
+        'youtube/status': () => this.getHealth()
       })
-      ctx.webui.addListener('youtube/status', () => this.getHealth())
     })
 
     Promise.resolve().then(() => {
@@ -612,8 +613,4 @@ export const apply = (ctx: Context, config: Config) => {
   ctx.plugin(YoutubeAdapterService, config)
 }
 
-declare module '@cordisjs/plugin-webui' {
-  interface Events {
-    'youtube/status'(): any
-  }
-}
+

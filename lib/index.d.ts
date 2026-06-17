@@ -57,8 +57,3 @@ export declare class YoutubeAdapterService extends Service implements LfvsAdapte
 }
 export declare const inject: string[];
 export declare const apply: (ctx: Context, config: Config) => void;
-declare module '@cordisjs/plugin-webui' {
-    interface Events {
-        'youtube/status'(): any;
-    }
-}
